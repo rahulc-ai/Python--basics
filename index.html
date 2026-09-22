@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ledger — Smart Invoice Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --bg: #F6F3EC;
+    --surface: #FFFFFF;
+    --ink: #1C201D;
+    --ink-muted: #6B6F67;
+    --border: #DED6C3;
+    --primary: #21403F;
+    --primary-ink: #FBF9F3;
+    --accent: #B07E2B;
+    --success: #3E6A4A;
+    --success-bg: #E3ECE1;
+    --danger: #A2402C;
+    --danger-bg: #F4E1D9;
+    --warn: #8A6A1E;
+    --warn-bg: #F1E6C9;
+    --neutral-bg: #ECE9E0;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-sizing: border-box;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14181A; --surface: #1C2123; --ink: #ECE8DE; --ink-muted: #98A099;
+      --border: #333A38; --primary: #6E9C8F; --primary-ink: #0D1210; --accent: #D6A85B;
+      --success: #6FA07E; --success-bg: #1F2C22; --danger: #DB8A72; --danger-bg: #33211C;
+      --warn: #D8BB6E; --warn-bg: #332B18; --neutral-bg: #262A27;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14181A; --surface: #1C2123; --ink: #ECE8DE; --ink-muted: #98A099;
+    --border: #333A38; --primary: #6E9C8F; --primary-ink: #0D1210; --accent: #D6A85B;
+    --success: #6FA07E; --success-bg: #1F2C22; --danger: #DB8A72; --danger-bg: #33211C;
+    --warn: #D8BB6E; --warn-bg: #332B18; --neutral-bg: #262A27;
+  }
+  html, body { height: 100%; background: var(--bg); color: var(--ink); font-family: 'Inter', system-ui, sans-serif; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+  .ledger-row { display:flex; align-items:center; gap:1rem; padding: 0.9rem 0.25rem; border-bottom: 1px solid var(--border); }
+  .ledger-row:hover { background: color-mix(in srgb, var(--primary) 4%, transparent); }
+  .ledger-empty { padding: 2rem 0.5rem; color: var(--ink-muted); font-size: 0.95rem; }
+  .tab-btn { padding: 0.55rem 0.9rem; font-size: 0.9rem; font-weight: 500; color: var(--ink-muted); border-bottom: 2px solid transparent; }
+  .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .btn-primary { background: var(--primary); color: var(--primary-ink); padding: 0.55rem 1.1rem; font-weight: 600; font-size: 0.9rem; border: 1px solid var(--primary); }
+  .btn-primary:hover { opacity: 0.92; }
+  .btn-ghost { border: 1px solid var(--border); color: var(--ink); padding: 0.5rem 0.9rem; font-size: 0.85rem; background: transparent; }
+  .btn-ghost:hover { background: var(--neutral-bg); }
+  .btn-danger { border: 1px solid var(--danger); color: var(--danger); padding: 0.5rem 0.9rem; font-size: 0.85rem; background: transparent; }
+  .btn-danger:hover { background: var(--danger-bg); }
+  .field-label { font-size: 0.78rem; color: var(--ink-muted); margin-bottom: 0.25rem; display:block; }
+  .input { width: 100%; border: 1px solid var(--border); background: var(--surface); color: var(--ink); padding: 0.5rem 0.65rem; font-size: 0.9rem; }
+  .input:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+  .badge { display:inline-flex; align-items:center; padding: 0.2rem 0.6rem; font-size: 0.75rem; font-weight: 600; border-radius: 3px; white-space: nowrap; }
+  .badge-success { background: var(--success-bg); color: var(--success); }
+  .badge-warn { background: var(--warn-bg); color: var(--warn); }
+  .badge-danger { background: var(--danger-bg); color: var(--danger); }
+  .badge-neutral { background: var(--neutral-bg); color: var(--ink-muted); }
+  .stat-card { border: 1px solid var(--border); background: var(--surface); padding: 1.1rem 1.2rem; }
+  .stat-label { font-size: 0.78rem; color: var(--ink-muted); margin-bottom: 0.4rem; }
+  .stat-value { font-size: 1.5rem; font-weight: 600; font-family: 'IBM Plex Mono', monospace; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(20,20,18,0.55); display:flex; align-items:flex-start; justify-content:center; padding: 3vh 1rem; overflow-y:auto; z-index: 50; }
+  .modal-card { background: var(--surface); border: 1px solid var(--border); max-width: 640px; width: 100%; padding: 1.75rem; margin: auto; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  a, button { cursor: pointer; }
+  *:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="max-w-5xl mx-auto px-4 sm:px-6 pb-24">
+
+  <header class="pt-8 pb-5 border-b border-[var(--border)] flex items-center justify-between flex-wrap gap-3">
+    <div>
+      <div class="text-xs uppercase tracking-wide text-[var(--ink-muted)] mono">Smart Invoice Manager</div>
+      <h1 class="text-2xl font-semibold" style="letter-spacing:-0.01em;">Ledger</h1>
+    </div>
+    <div class="flex gap-2">
+      <button class="btn-ghost" onclick="loadSampleData()">Load demo data</button>
+      <button class="btn-primary" onclick="openInvoiceForm()">+ New invoice</button>
+    </div>
+  </header>
+
+  <nav class="flex gap-1 border-b border-[var(--border)] mt-1 overflow-x-auto">
+    <button id="tabbtn-dashboard" class="tab-btn active" onclick="showTab('dashboard')">Dashboard</button>
+    <button id="tabbtn-invoices" class="tab-btn" onclick="showTab('invoices')">Invoices</button>
+    <button id="tabbtn-vendors" class="tab-btn" onclick="showTab('vendors')">Vendors</button>
+    <button id="tabbtn-ai" class="tab-btn" onclick="showTab('ai')">AI extraction</button>
+  </nav>
+
+  <!-- DASHBOARD -->
+  <section id="panel-dashboard" class="tab-panel py-6">
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
+      <div class="stat-card"><div class="stat-label">Total invoices</div><div class="stat-value" id="statTotalInvoices">0</div></div>
+      <div class="stat-card"><div class="stat-label">Total billed</div><div class="stat-value" id="statTotalBilled">₹0</div></div>
+      <div class="stat-card"><div class="stat-label">Outstanding</div><div class="stat-value" id="statOutstanding" style="color:var(--accent)">₹0</div></div>
+      <div class="stat-card"><div class="stat-label">Overdue</div><div class="stat-value" id="statOverdue" style="color:var(--danger)">0</div></div>
+      <div class="stat-card"><div class="stat-label">Paid</div><div class="stat-value" id="statPaid" style="color:var(--success)">0</div></div>
+    </div>
+    <h2 class="text-sm font-semibold uppercase tracking-wide text-[var(--ink-muted)] mb-2">Recent invoices</h2>
+    <div id="recentInvoices"></div>
+  </section>
+
+  <!-- INVOICES -->
+  <section id="panel-invoices" class="tab-panel py-6 hidden">
+    <div class="flex flex-wrap gap-2 mb-4">
+      <input id="searchBox" class="input" style="max-width:220px" placeholder="Search invoice # or vendor" oninput="renderInvoiceList()">
+      <select id="filterVendor" class="input" style="max-width:180px" onchange="renderInvoiceList()"></select>
+      <select id="filterStatus" class="input" style="max-width:160px" onchange="renderInvoiceList()">
+        <option value="">All statuses</option>
+        <option>Unpaid</option>
+        <option>Partially Paid</option>
+        <option>Paid</option>
+      </select>
+      <label class="flex items-center gap-2 text-sm px-2 border border-[var(--border)]">
+        <input type="checkbox" id="filterOverdue" onchange="renderInvoiceList()"> Overdue only
+      </label>
+    </div>
+    <div id="invoiceList"></div>
+  </section>
+
+  <!-- VENDORS -->
+  <section id="panel-vendors" class="tab-panel py-6 hidden">
+    <form id="vendorForm" onsubmit="addVendor(event)" class="grid sm:grid-cols-2 gap-3 mb-6 border border-[var(--border)] p-4">
+      <div><span class="field-label">Vendor name *</span><input id="vendorName" class="input" required></div>
+      <div><span class="field-label">Email</span><input id="vendorEmail" type="email" class="input"></div>
+      <div><span class="field-label">Phone</span><input id="vendorPhone" class="input"></div>
+      <div><span class="field-label">Address</span><input id="vendorAddress" class="input"></div>
+      <div class="sm:col-span-2"><button class="btn-primary" type="submit">Add vendor</button></div>
+    </form>
+    <div id="vendorList"></div>
+  </section>
+
+  <!-- AI EXTRACTION -->
+  <section id="panel-ai" class="tab-panel py-6 hidden">
+    <p class="text-sm text-[var(--ink-muted)] mb-3">Paste invoice text (from an email, PDF copy-paste, or scanned OCR output). The extractor pulls out vendor, invoice number, dates, tax and line items using pattern matching — always verify before saving.</p>
+    <textarea id="aiText" class="input" rows="8" placeholder="Vendor: Bluepeak Traders
+Invoice Number: INV-2044
+Invoice Date: 12/09/2026
+Due Date: 27/09/2026
+Office Chairs        4    3200
+Desk Lamps            10    650
+Tax: 18%
+Grand Total: 20886"></textarea>
+    <button class="btn-primary mt-3" onclick="runAIExtract()">Extract details</button>
+
+    <div id="aiReview" class="hidden mt-6 border border-[var(--border)] p-4">
+      <div class="text-sm font-semibold mb-1">Review extracted data</div>
+      <div id="aiConfidenceNote" class="text-xs text-[var(--ink-muted)] mb-4"></div>
+      <div class="grid sm:grid-cols-2 gap-3 mb-4">
+        <div><span class="field-label">Vendor</span><input id="aiVendor" class="input"></div>
+        <div><span class="field-label">Invoice number</span><input id="aiInvNumber" class="input"></div>
+        <div><span class="field-label">Invoice date</span><input id="aiInvDate" type="date" class="input"></div>
+        <div><span class="field-label">Due date</span><input id="aiDueDate" type="date" class="input"></div>
+        <div><span class="field-label">Tax %</span><input id="aiTax" type="number" step="0.01" class="input" oninput="updateAITotals()"></div>
+      </div>
+      <table class="w-full text-sm mb-2">
+        <thead><tr class="text-left text-[var(--ink-muted)] border-b border-[var(--border)]"><th class="py-1">Description</th><th class="py-1 w-16 text-right">Qty</th><th class="py-1 w-24 text-right">Unit price</th><th class="py-1 w-24 text-right">Amount</th><th></th></tr></thead>
+        <tbody id="aiItemRows"></tbody>
+      </table>
+      <button class="btn-ghost text-sm mb-4" onclick="addAIItemRow()">+ Add line item</button>
+      <div class="flex justify-end mb-4">
+        <div class="w-48 text-sm space-y-1">
+          <div class="flex justify-between"><span class="text-[var(--ink-muted)]">Subtotal</span><span class="mono" id="aiSubtotal">₹0</span></div>
+          <div class="flex justify-between"><span class="text-[var(--ink-muted)]">Tax</span><span class="mono" id="aiTaxAmt">₹0</span></div>
+          <div class="flex justify-between font-semibold border-t border-[var(--border)] pt-1"><span>Total</span><span class="mono" id="aiTotal">₹0</span></div>
+        </div>
+      </div>
+      <button class="btn-primary" onclick="saveAIExtractedInvoice()">Confirm &amp; save invoice</button>
+    </div>
+  </section>
+</div>
+
+<!-- INVOICE FORM MODAL -->
+<div id="invoiceModal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <div class="flex justify-between items-center mb-4">
+      <h3 id="invoiceFormTitle" class="text-lg font-semibold">New invoice</h3>
+      <button class="btn-ghost" onclick="closeInvoiceForm()">Close</button>
+    </div>
+    <form id="invoiceForm" onsubmit="saveInvoiceForm(event)">
+      <div class="grid sm:grid-cols-2 gap-3 mb-3">
+        <div><span class="field-label">Vendor *</span><select id="invVendor" class="input" required></select></div>
+        <div><span class="field-label">Invoice number *</span><input id="invNumber" class="input" required></div>
+        <div><span class="field-label">Invoice date *</span><input id="invDate" type="date" class="input" required></div>
+        <div><span class="field-label">Due date *</span><input id="invDueDate" type="date" class="input" required></div>
+        <div><span class="field-label">Tax %</span><input id="invTax" type="number" step="0.01" value="0" class="input" oninput="updateFormTotals()"></div>
+        <div>
+          <span class="field-label">Payment status</span>
+          <select id="invStatus" class="input" onchange="toggleAmountPaidField()">
+            <option>Unpaid</option><option>Partially Paid</option><option>Paid</option>
+          </select>
+        </div>
+        <div id="amountPaidWrap" style="display:none"><span class="field-label">Amount paid</span><input id="invAmountPaid" type="number" step="0.01" value="0" class="input"></div>
+      </div>
+
+      <div class="text-sm font-semibold mb-1 mt-4">Line items</div>
+      <table class="w-full text-sm mb-2">
+        <thead><tr class="text-left text-[var(--ink-muted)] border-b border-[var(--border)]"><th class="py-1">Description</th><th class="py-1 w-16 text-right">Qty</th><th class="py-1 w-24 text-right">Unit price</th><th class="py-1 w-24 text-right">Amount</th><th></th></tr></thead>
+        <tbody id="lineItemRows"></tbody>
+      </table>
+      <button type="button" class="btn-ghost text-sm mb-4" onclick="addLineItemRow()">+ Add line item</button>
+
+      <div class="flex justify-end mb-5">
+        <div class="w-48 text-sm space-y-1">
+          <div class="flex justify-between"><span class="text-[var(--ink-muted)]">Subtotal</span><span class="mono" id="formSubtotal">₹0</span></div>
+          <div class="flex justify-between"><span class="text-[var(--ink-muted)]">Tax</span><span class="mono" id="formTaxAmt">₹0</span></div>
+          <div class="flex justify-between font-semibold border-t border-[var(--border)] pt-1"><span>Total</span><span class="mono" id="formTotal">₹0</span></div>
+        </div>
+      </div>
+      <input type="hidden" id="invTotalHidden">
+      <div class="flex gap-2">
+        <button class="btn-primary" type="submit">Save invoice</button>
+        <button class="btn-ghost" type="button" onclick="closeInvoiceForm()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- INVOICE DETAILS MODAL -->
+<div id="detailsModal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <div class="flex justify-end mb-2"><button class="btn-ghost" onclick="closeDetails()">Close</button></div>
+    <div id="detailsBody"></div>
+    <div class="flex gap-2 mt-5 flex-wrap">
+      <button id="detailsMarkPaidBtn" class="btn-primary">Mark as paid</button>
+      <button id="detailsEditBtn" class="btn-ghost">Edit</button>
+      <button id="detailsDeleteBtn" class="btn-danger">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'sim_invoice_manager_v1';
+let state = { vendors: [], invoices: [] };
+let formItems = [];
+let aiItems = [];
+let editingInvoiceId = null;
+
+function loadState(){
+  try{ const raw = localStorage.getItem(STORAGE_KEY); if(raw) state = JSON.parse(raw); }
+  catch(e){ console.error('Storage read failed', e); }
+  if(!state.vendors) state.vendors = [];
+  if(!state.invoices) state.invoices = [];
+}
+function saveState(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  catch(e){ console.error('Storage write failed', e); }
+}
+function uid(prefix){ return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function fmtCurrency(n){ n = Number(n)||0; return '₹' + n.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+function fmtDate(d){ if(!d) return '—'; const dt = new Date(d+'T00:00:00'); if(isNaN(dt)) return d; return dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
+function isOverdue(inv){ if(inv.status==='Paid') return false; return inv.dueDate < todayISO(); }
+function computeTotals(items, taxPercent){
+  const subtotal = items.reduce((s,it)=> s + (Number(it.qty)||0)*(Number(it.price)||0), 0);
+  const taxAmt = subtotal * (Number(taxPercent)||0) / 100;
+  return { subtotal, taxAmt, total: subtotal + taxAmt };
+}
+function vendorById(id){ return state.vendors.find(v=>v.id===id); }
+function invoiceById(id){ return state.invoices.find(i=>i.id===id); }
+function statusClass(status){ if(status==='Paid') return 'success'; if(status==='Partially Paid') return 'warn'; return 'neutral'; }
+function escapeHtml(str){ return String(str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function showTab(tab){
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.add('hidden'));
+  document.getElementById('panel-'+tab).classList.remove('hidden');
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tabbtn-'+tab).classList.add('active');
+  if(tab==='dashboard') renderDashboard();
+  if(tab==='vendors') renderVendors();
+  if(tab==='invoices') renderInvoiceList();
+}
+
+/* ---------- VENDORS ---------- */
+function addVendor(e){
+  e.preventDefault();
+  const name = document.getElementById('vendorName').value.trim();
+  if(!name) return;
+  if(state.vendors.some(v=>v.name.toLowerCase()===name.toLowerCase())){ alert('This vendor is already in the list.'); return; }
+  state.vendors.push({
+    id: uid('ven'), name,
+    email: document.getElementById('vendorEmail').value.trim(),
+    phone: document.getElementById('vendorPhone').value.trim(),
+    address: document.getElementById('vendorAddress').value.trim(),
+    createdAt: todayISO()
+  });
+  saveState();
+  document.getElementById('vendorForm').reset();
+  renderVendors(); renderVendorOptions();
+}
+function deleteVendor(id){
+  if(state.invoices.some(i=>i.vendorId===id)){ alert('This vendor has invoices on record — remove or reassign those first.'); return; }
+  if(!confirm('Remove this vendor?')) return;
+  state.vendors = state.vendors.filter(v=>v.id!==id);
+  saveState(); renderVendors(); renderVendorOptions();
+}
+function renderVendors(){
+  const list = document.getElementById('vendorList');
+  if(state.vendors.length===0){ list.innerHTML = `<div class="ledger-empty">No vendors yet. Add your first vendor using the form above.</div>`; return; }
+  list.innerHTML = state.vendors.map(v=>{
+    const count = state.invoices.filter(i=>i.vendorId===v.id).length;
+    const outstanding = state.invoices.filter(i=>i.vendorId===v.id && i.status!=='Paid').reduce((s,i)=>s+(i.total-(i.amountPaid||0)),0);
+    return `<div class="ledger-row">
+      <div class="flex-1 min-w-0">
+        <div class="font-semibold">${escapeHtml(v.name)}</div>
+        <div class="text-sm text-[var(--ink-muted)] truncate">${escapeHtml(v.email||'')}${v.phone?(' · '+escapeHtml(v.phone)):''}</div>
+      </div>
+      <div class="text-sm text-[var(--ink-muted)] w-28 text-right">${count} invoice${count===1?'':'s'}</div>
+      <div class="text-sm mono w-32 text-right" style="${outstanding>0?'color:var(--danger)':''}">${fmtCurrency(outstanding)}</div>
+      <button class="btn-ghost text-sm" onclick="deleteVendor('${v.id}')">Remove</button>
+    </div>`;
+  }).join('');
+}
+function renderVendorOptions(){
+  const opts = state.vendors.map(v=>`<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('');
+  document.getElementById('invVendor').innerHTML = `<option value="">Select vendor…</option>` + opts;
+  document.getElementById('filterVendor').innerHTML = `<option value="">All vendors</option>` + opts;
+}
+
+/* ---------- INVOICE FORM ---------- */
+function openInvoiceForm(editId){
+  document.getElementById('invoiceFormTitle').textContent = editId ? 'Edit invoice' : 'New invoice';
+  document.getElementById('invoiceForm').reset();
+  editingInvoiceId = editId || null;
+  formItems = [];
+  if(editId){
+    const inv = invoiceById(editId);
+    document.getElementById('invVendor').value = inv.vendorId;
+    document.getElementById('invNumber').value = inv.invoiceNumber;
+    document.getElementById('invDate').value = inv.invoiceDate;
+    document.getElementById('invDueDate').value = inv.dueDate;
+    document.getElementById('invTax').value = inv.taxPercent;
+    document.getElementById('invStatus').value = inv.status;
+    document.getElementById('invAmountPaid').value = inv.amountPaid || 0;
+    formItems = inv.items.map(it=>({...it}));
+  } else {
+    document.getElementById('invDate').value = todayISO();
+    document.getElementById('invStatus').value = 'Unpaid';
+    formItems.push({id: uid('itm'), description:'', qty:1, price:0});
+  }
+  renderLineItemRows();
+  updateFormTotals();
+  toggleAmountPaidField();
+  document.getElementById('invoiceModal').classList.remove('hidden');
+}
+function closeInvoiceForm(){ document.getElementById('invoiceModal').classList.add('hidden'); }
+function toggleAmountPaidField(){
+  document.getElementById('amountPaidWrap').style.display = document.getElementById('invStatus').value === 'Partially Paid' ? 'block' : 'none';
+}
+function addLineItemRow(){ formItems.push({id: uid('itm'), description:'', qty:1, price:0}); renderLineItemRows(); updateFormTotals(); }
+function removeLineItemRow(id){ formItems = formItems.filter(i=>i.id!==id); renderLineItemRows(); updateFormTotals(); }
+function updateLineItem(id, field, value){
+  const it = formItems.find(i=>i.id===id); if(!it) return;
+  it[field] = field==='description' ? value : Number(value);
+  const cell = document.getElementById('linetotal-'+id);
+  if(cell) cell.textContent = fmtCurrency((Number(it.qty)||0)*(Number(it.price)||0));
+  updateFormTotals();
+}
+function renderLineItemRows(){
+  document.getElementById('lineItemRows').innerHTML = formItems.map(it=>`
+    <tr class="border-b border-[var(--border)]">
+      <td class="py-1 pr-2"><input class="input" value="${escapeHtml(it.description)}" oninput="updateLineItem('${it.id}','description',this.value)"></td>
+      <td class="py-1 px-1"><input class="input text-right" type="number" min="0" step="1" value="${it.qty}" oninput="updateLineItem('${it.id}','qty',this.value)"></td>
+      <td class="py-1 px-1"><input class="input text-right" type="number" min="0" step="0.01" value="${it.price}" oninput="updateLineItem('${it.id}','price',this.value)"></td>
+      <td class="py-1 px-1 text-right mono" id="linetotal-${it.id}">${fmtCurrency(it.qty*it.price)}</td>
+      <td class="py-1 pl-1"><button type="button" class="btn-ghost text-xs" onclick="removeLineItemRow('${it.id}')">✕</button></td>
+    </tr>`).join('');
+}
+function updateFormTotals(){
+  const taxPercent = Number(document.getElementById('invTax').value)||0;
+  const {subtotal, taxAmt, total} = computeTotals(formItems, taxPercent);
+  document.getElementById('formSubtotal').textContent = fmtCurrency(subtotal);
+  document.getElementById('formTaxAmt').textContent = fmtCurrency(taxAmt);
+  document.getElementById('formTotal').textContent = fmtCurrency(total);
+  document.getElementById('invTotalHidden').value = total.toFixed(2);
+}
+function saveInvoiceForm(e){
+  e.preventDefault();
+  const vendorId = document.getElementById('invVendor').value;
+  const invoiceNumber = document.getElementById('invNumber').value.trim();
+  const invoiceDate = document.getElementById('invDate').value;
+  const dueDate = document.getElementById('invDueDate').value;
+  const taxPercent = Number(document.getElementById('invTax').value)||0;
+  const status = document.getElementById('invStatus').value;
+  let amountPaid = Number(document.getElementById('invAmountPaid').value)||0;
+
+  if(!vendorId){ alert('Please select a vendor.'); return; }
+  if(!invoiceNumber){ alert('Please enter an invoice number.'); return; }
+  if(!invoiceDate || !dueDate){ alert('Invoice date and due date are both required.'); return; }
+  if(formItems.length===0 || formItems.some(it=>!it.description.trim())){ alert('Add at least one line item with a description.'); return; }
+
+  const dup = state.invoices.find(i => i.vendorId===vendorId && i.invoiceNumber.toLowerCase()===invoiceNumber.toLowerCase() && i.id!==editingInvoiceId);
+  if(dup){ alert('This invoice number already exists for this vendor. Invoice numbers must be unique per vendor.'); return; }
+
+  const {total} = computeTotals(formItems, taxPercent);
+  if(status==='Paid') amountPaid = total;
+  if(status==='Unpaid') amountPaid = 0;
+  if(amountPaid > total) amountPaid = total;
+
+  const record = {
+    id: editingInvoiceId || uid('inv'),
+    vendorId, invoiceNumber, invoiceDate, dueDate,
+    items: formItems.map(it=>({...it})),
+    taxPercent, total, status, amountPaid,
+    createdAt: editingInvoiceId ? invoiceById(editingInvoiceId).createdAt : todayISO()
+  };
+  if(editingInvoiceId){
+    const idx = state.invoices.findIndex(i=>i.id===editingInvoiceId);
+    state.invoices[idx] = record;
+  } else {
+    state.invoices.push(record);
+  }
+  saveState();
+  closeInvoiceForm();
+  renderInvoiceList(); renderDashboard(); renderVendors();
+}
+
+/* ---------- INVOICE LIST ---------- */
+function renderInvoiceList(){
+  const search = document.getElementById('searchBox').value.toLowerCase().trim();
+  const vendorFilter = document.getElementById('filterVendor').value;
+  const statusFilter = document.getElementById('filterStatus').value;
+  const overdueOnly = document.getElementById('filterOverdue').checked;
+
+  let list = state.invoices.slice();
+  if(vendorFilter) list = list.filter(i=>i.vendorId===vendorFilter);
+  if(statusFilter) list = list.filter(i=>i.status===statusFilter);
+  if(overdueOnly) list = list.filter(isOverdue);
+  if(search) list = list.filter(i=>{
+    const v = vendorById(i.vendorId);
+    return i.invoiceNumber.toLowerCase().includes(search) || (v && v.name.toLowerCase().includes(search));
+  });
+  list.sort((a,b)=> b.invoiceDate.localeCompare(a.invoiceDate));
+
+  const container = document.getElementById('invoiceList');
+  if(list.length===0){ container.innerHTML = `<div class="ledger-empty">No invoices match. Adjust filters or create a new invoice.</div>`; return; }
+  container.innerHTML = list.map(inv=>{
+    const v = vendorById(inv.vendorId);
+    const overdue = isOverdue(inv);
+    return `<div class="ledger-row" onclick="openInvoiceDetails('${inv.id}')">
+      <div class="flex-1 min-w-0">
+        <div class="font-semibold">${escapeHtml(v?v.name:'Unknown vendor')}</div>
+        <div class="text-sm text-[var(--ink-muted)] mono">#${escapeHtml(inv.invoiceNumber)} · ${fmtDate(inv.invoiceDate)}</div>
+      </div>
+      <div class="text-sm w-36" style="${overdue?'color:var(--danger);font-weight:600':'color:var(--ink-muted)'}">${overdue? 'Overdue · '+fmtDate(inv.dueDate) : 'Due '+fmtDate(inv.dueDate)}</div>
+      <div class="mono text-sm w-28 text-right">${fmtCurrency(inv.total)}</div>
+      <div class="w-32 flex justify-end"><span class="badge badge-${overdue?'danger':statusClass(inv.status)}">${overdue?'Overdue':inv.status}</span></div>
+    </div>`;
+  }).join('');
+}
+
+/* ---------- INVOICE DETAILS ---------- */
+function openInvoiceDetails(id){
+  const inv = invoiceById(id); const v = vendorById(inv.vendorId);
+  const overdue = isOverdue(inv);
+  const {subtotal, taxAmt} = computeTotals(inv.items, inv.taxPercent);
+  const balance = inv.total - (inv.amountPaid||0);
+  document.getElementById('detailsBody').innerHTML = `
+    <div class="flex items-start justify-between mb-4">
+      <div><div class="text-xs uppercase tracking-wide text-[var(--ink-muted)] mb-1">Invoice</div><div class="text-2xl font-semibold mono">#${escapeHtml(inv.invoiceNumber)}</div></div>
+      <span class="badge badge-${overdue?'danger':statusClass(inv.status)} text-sm">${overdue?'Overdue':inv.status}</span>
+    </div>
+    <div class="grid grid-cols-2 gap-4 mb-6 text-sm">
+      <div><div class="text-[var(--ink-muted)]">Vendor</div><div class="font-medium">${escapeHtml(v?v.name:'—')}</div></div>
+      <div><div class="text-[var(--ink-muted)]">Invoice date</div><div class="font-medium">${fmtDate(inv.invoiceDate)}</div></div>
+      <div><div class="text-[var(--ink-muted)]">Due date</div><div class="font-medium" style="${overdue?'color:var(--danger)':''}">${fmtDate(inv.dueDate)}</div></div>
+      <div><div class="text-[var(--ink-muted)]">Balance due</div><div class="font-medium mono">${fmtCurrency(balance)}</div></div>
+    </div>
+    <table class="w-full text-sm mb-4">
+      <thead><tr class="text-left text-[var(--ink-muted)] border-b border-[var(--border)]"><th class="py-2">Description</th><th class="py-2 text-right">Qty</th><th class="py-2 text-right">Unit price</th><th class="py-2 text-right">Amount</th></tr></thead>
+      <tbody>${inv.items.map(it=>`<tr class="border-b border-[var(--border)]"><td class="py-2">${escapeHtml(it.description)}</td><td class="py-2 text-right mono">${it.qty}</td><td class="py-2 text-right mono">${fmtCurrency(it.price)}</td><td class="py-2 text-right mono">${fmtCurrency(it.qty*it.price)}</td></tr>`).join('')}</tbody>
+    </table>
+    <div class="flex justify-end">
+      <div class="w-56 text-sm space-y-1">
+        <div class="flex justify-between"><span class="text-[var(--ink-muted)]">Subtotal</span><span class="mono">${fmtCurrency(subtotal)}</span></div>
+        <div class="flex justify-between"><span class="text-[var(--ink-muted)]">Tax (${inv.taxPercent}%)</span><span class="mono">${fmtCurrency(taxAmt)}</span></div>
+        <div class="flex justify-between font-semibold border-t border-[var(--border)] pt-1"><span>Total</span><span class="mono">${fmtCurrency(inv.total)}</span></div>
+        <div class="flex justify-between text-[var(--ink-muted)]"><span>Paid</span><span class="mono">${fmtCurrency(inv.amountPaid||0)}</span></div>
+      </div>
+    </div>`;
+  document.getElementById('detailsEditBtn').onclick = ()=>{ closeDetails(); openInvoiceForm(id); };
+  document.getElementById('detailsDeleteBtn').onclick = ()=> deleteInvoice(id);
+  document.getElementById('detailsMarkPaidBtn').onclick = ()=> quickMarkPaid(id);
+  document.getElementById('detailsMarkPaidBtn').style.display = inv.status==='Paid' ? 'none' : 'inline-flex';
+  document.getElementById('detailsModal').classList.remove('hidden');
+}
+function closeDetails(){ document.getElementById('detailsModal').classList.add('hidden'); }
+function deleteInvoice(id){
+  if(!confirm('Delete this invoice? This cannot be undone.')) return;
+  state.invoices = state.invoices.filter(i=>i.id!==id);
+  saveState(); closeDetails(); renderInvoiceList(); renderDashboard(); renderVendors();
+}
+function quickMarkPaid(id){
+  const inv = invoiceById(id); inv.status='Paid'; inv.amountPaid = inv.total;
+  saveState(); openInvoiceDetails(id); renderInvoiceList(); renderDashboard();
+}
+
+/* ---------- DASHBOARD ---------- */
+function renderDashboard(){
+  const invoices = state.invoices;
+  const totalBilled = invoices.reduce((s,i)=>s+i.total,0);
+  const totalOutstanding = invoices.filter(i=>i.status!=='Paid').reduce((s,i)=>s+(i.total-(i.amountPaid||0)),0);
+  const overdueList = invoices.filter(isOverdue);
+  const overdueAmount = overdueList.reduce((s,i)=>s+(i.total-(i.amountPaid||0)),0);
+  const paidCount = invoices.filter(i=>i.status==='Paid').length;
+
+  document.getElementById('statTotalInvoices').textContent = invoices.length;
+  document.getElementById('statTotalBilled').textContent = fmtCurrency(totalBilled);
+  document.getElementById('statOutstanding').textContent = fmtCurrency(totalOutstanding);
+  document.getElementById('statOverdue').textContent = overdueList.length + ' · ' + fmtCurrency(overdueAmount);
+  document.getElementById('statPaid').textContent = paidCount + ' / ' + invoices.length;
+
+  const recent = invoices.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,6);
+  const el = document.getElementById('recentInvoices');
+  if(recent.length===0){ el.innerHTML = `<div class="ledger-empty">No invoices yet. Create one from the Invoices tab, or try "Load demo data".</div>`; return; }
+  el.innerHTML = recent.map(inv=>{
+    const v = vendorById(inv.vendorId); const overdue = isOverdue(inv);
+    return `<div class="ledger-row" onclick="showTab('invoices'); setTimeout(()=>openInvoiceDetails('${inv.id}'),30)">
+      <div class="flex-1 min-w-0"><div class="font-medium">${escapeHtml(v?v.name:'—')}</div><div class="text-xs text-[var(--ink-muted)] mono">#${escapeHtml(inv.invoiceNumber)}</div></div>
+      <div class="mono text-sm w-28 text-right">${fmtCurrency(inv.total)}</div>
+      <span class="badge badge-${overdue?'danger':statusClass(inv.status)}">${overdue?'Overdue':inv.status}</span>
+    </div>`;
+  }).join('');
+}
+
+/* ---------- AI EXTRACTION (pattern-based, edits reviewed before saving) ---------- */
+function extractInvoiceFromText(text){
+  const result = {vendor:'', invoiceNumber:'', invoiceDate:'', dueDate:'', taxPercent:0, items:[]};
+  const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+
+  let m = text.match(/(?:vendor|from|bill\s*from|supplier)\s*[:\-]\s*(.+)/i);
+  result.vendor = m ? m[1].split(/[,\n]/)[0].trim() : (lines[0] || '');
+
+  m = text.match(/invoice\s*(?:no\.?|number|#)\s*[:\-]?\s*([A-Za-z0-9\-\/]+)/i);
+  result.invoiceNumber = m ? m[1].trim() : '';
+
+  function findDate(labelRegex){
+    const r = new RegExp(labelRegex + '\\s*[:\\-]?\\s*([0-9]{1,4}[\\/\\-][0-9]{1,2}[\\/\\-][0-9]{1,4}|[A-Za-z]+\\s+[0-9]{1,2},?\\s+[0-9]{4})', 'i');
+    const mm = text.match(r);
+    if(!mm) return '';
+    const parsed = new Date(mm[1]);
+    return isNaN(parsed) ? '' : parsed.toISOString().slice(0,10);
+  }
+  result.invoiceDate = findDate('invoice\\s*date') || findDate('\\bdate');
+  result.dueDate = findDate('due\\s*date');
+
+  m = text.match(/(?:tax|gst)\s*[:\-]?\s*([0-9]+(?:\.[0-9]+)?)\s*%/i);
+  result.taxPercent = m ? Number(m[1]) : 0;
+
+  lines.forEach(line=>{
+    const parts = line.split(/\s{2,}|\t/).map(p=>p.trim()).filter(Boolean);
+    if(parts.length>=3){
+      const qty = Number(parts[parts.length-2].replace(/[^0-9.]/g,''));
+      const price = Number(parts[parts.length-1].replace(/[^0-9.]/g,''));
+      if(!isNaN(qty) && !isNaN(price) && qty>0 && price>0){
+        result.items.push({id: uid('itm'), description: parts.slice(0, parts.length-2).join(' '), qty, price});
+      }
+    }
+  });
+  return result;
+}
+function runAIExtract(){
+  const text = document.getElementById('aiText').value;
+  if(!text.trim()){ alert('Paste some invoice text first.'); return; }
+  const ex = extractInvoiceFromText(text);
+  document.getElementById('aiVendor').value = ex.vendor;
+  document.getElementById('aiInvNumber').value = ex.invoiceNumber;
+  document.getElementById('aiInvDate').value = ex.invoiceDate || todayISO();
+  document.getElementById('aiDueDate').value = ex.dueDate || todayISO();
+  document.getElementById('aiTax').value = ex.taxPercent;
+  aiItems = ex.items.length ? ex.items : [{id: uid('itm'), description:'', qty:1, price:0}];
+  renderAIItemRows(); updateAITotals();
+  document.getElementById('aiConfidenceNote').textContent = ex.items.length
+    ? 'Line items were detected from the text — double-check the amounts.'
+    : "Line items weren't clearly detected — add them manually before saving.";
+  document.getElementById('aiReview').classList.remove('hidden');
+}
+function addAIItemRow(){ aiItems.push({id: uid('itm'), description:'', qty:1, price:0}); renderAIItemRows(); updateAITotals(); }
+function removeAIItemRow(id){ aiItems = aiItems.filter(i=>i.id!==id); renderAIItemRows(); updateAITotals(); }
+function updateAIItem(id, field, value){
+  const it = aiItems.find(i=>i.id===id); if(!it) return;
+  it[field] = field==='description' ? value : Number(value);
+  const cell = document.getElementById('ai-linetotal-'+id);
+  if(cell) cell.textContent = fmtCurrency((Number(it.qty)||0)*(Number(it.price)||0));
+  updateAITotals();
+}
+function renderAIItemRows(){
+  document.getElementById('aiItemRows').innerHTML = aiItems.map(it=>`
+    <tr class="border-b border-[var(--border)]">
+      <td class="py-1 pr-2"><input class="input" value="${escapeHtml(it.description)}" oninput="updateAIItem('${it.id}','description',this.value)"></td>
+      <td class="py-1 px-1"><input class="input text-right" type="number" min="0" step="1" value="${it.qty}" oninput="updateAIItem('${it.id}','qty',this.value)"></td>
+      <td class="py-1 px-1"><input class="input text-right" type="number" min="0" step="0.01" value="${it.price}" oninput="updateAIItem('${it.id}','price',this.value)"></td>
+      <td class="py-1 px-1 text-right mono" id="ai-linetotal-${it.id}">${fmtCurrency(it.qty*it.price)}</td>
+      <td class="py-1 pl-1"><button type="button" class="btn-ghost text-xs" onclick="removeAIItemRow('${it.id}')">✕</button></td>
+    </tr>`).join('');
+}
+function updateAITotals(){
+  const taxPercent = Number(document.getElementById('aiTax').value)||0;
+  const {subtotal, taxAmt, total} = computeTotals(aiItems, taxPercent);
+  document.getElementById('aiSubtotal').textContent = fmtCurrency(subtotal);
+  document.getElementById('aiTaxAmt').textContent = fmtCurrency(taxAmt);
+  document.getElementById('aiTotal').textContent = fmtCurrency(total);
+}
+function saveAIExtractedInvoice(){
+  const vendorName = document.getElementById('aiVendor').value.trim();
+  const invoiceNumber = document.getElementById('aiInvNumber').value.trim();
+  const invoiceDate = document.getElementById('aiInvDate').value;
+  const dueDate = document.getElementById('aiDueDate').value;
+  const taxPercent = Number(document.getElementById('aiTax').value)||0;
+  if(!vendorName || !invoiceNumber || !invoiceDate || !dueDate || aiItems.length===0 || aiItems.some(it=>!it.description.trim())){
+    alert('Please verify vendor, invoice number, both dates, and every line item description before saving.'); return;
+  }
+  let vendor = state.vendors.find(v=>v.name.toLowerCase()===vendorName.toLowerCase());
+  if(!vendor){ vendor = {id: uid('ven'), name: vendorName, email:'', phone:'', address:'', createdAt: todayISO()}; state.vendors.push(vendor); }
+  const dup = state.invoices.find(i=>i.vendorId===vendor.id && i.invoiceNumber.toLowerCase()===invoiceNumber.toLowerCase());
+  if(dup){ alert('This invoice number already exists for this vendor.'); return; }
+  const {total} = computeTotals(aiItems, taxPercent);
+  state.invoices.push({ id: uid('inv'), vendorId: vendor.id, invoiceNumber, invoiceDate, dueDate, items: aiItems.map(it=>({...it})), taxPercent, total, status:'Unpaid', amountPaid:0, createdAt: todayISO() });
+  saveState();
+  document.getElementById('aiReview').classList.add('hidden');
+  document.getElementById('aiText').value = '';
+  renderVendorOptions(); renderVendors(); renderInvoiceList(); renderDashboard();
+  showTab('invoices');
+}
+
+/* ---------- DEMO DATA ---------- */
+function loadSampleData(){
+  if(state.invoices.length && !confirm('This adds sample vendors and invoices to your current data. Continue?')) return;
+  const v1 = {id: uid('ven'), name:'Bluepeak Traders', email:'accounts@bluepeak.com', phone:'98765 43210', address:'Indore, MP', createdAt: todayISO()};
+  const v2 = {id: uid('ven'), name:'Nimbus Office Supplies', email:'billing@nimbus.co', phone:'91234 56780', address:'Pune, MH', createdAt: todayISO()};
+  state.vendors.push(v1, v2);
+  const mk = (vendorId, num, daysAgo, dueInDays, items, taxPercent, status, paidFraction) => {
+    const {total} = computeTotals(items, taxPercent);
+    const d = new Date(); d.setDate(d.getDate()-daysAgo);
+    const due = new Date(); due.setDate(due.getDate()+dueInDays);
+    return { id: uid('inv'), vendorId, invoiceNumber:num, invoiceDate:d.toISOString().slice(0,10), dueDate:due.toISOString().slice(0,10),
+      items, taxPercent, total, status, amountPaid: status==='Paid'?total: status==='Partially Paid'? Math.round(total*paidFraction):0, createdAt: d.toISOString().slice(0,10) };
+  };
+  state.invoices.push(
+    mk(v1.id,'INV-1001', 40, -12, [{id:uid('itm'),description:'Office Chairs',qty:4,price:3200},{id:uid('itm'),description:'Desk Lamps',qty:10,price:650}], 18, 'Unpaid', 0),
+    mk(v1.id,'INV-1002', 20, 10, [{id:uid('itm'),description:'Whiteboard 4x3',qty:2,price:2100}], 18, 'Partially Paid', 0.5),
+    mk(v2.id,'NB-334', 15, 20, [{id:uid('itm'),description:'A4 Paper Ream',qty:50,price:280},{id:uid('itm'),description:'Printer Cartridge',qty:6,price:1450}], 12, 'Paid', 1),
+    mk(v2.id,'NB-341', 3, 27, [{id:uid('itm'),description:'Ergonomic Keyboard',qty:8,price:1800}], 18, 'Unpaid', 0)
+  );
+  saveState();
+  renderVendorOptions(); renderVendors(); renderInvoiceList(); renderDashboard();
+  showTab('dashboard');
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  loadState();
+  renderVendorOptions();
+  renderVendors();
+  renderInvoiceList();
+  renderDashboard();
+});
+</script>
+</body>
+</html>
